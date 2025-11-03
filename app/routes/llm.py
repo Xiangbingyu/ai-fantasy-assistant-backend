@@ -20,12 +20,6 @@ def chat():
         master_sitting = data.get("master_sitting") or ""
         background = data.get("background") or ""
 
-        print("世界观:", worldview)
-        print("主要角色 sitting:", master_sitting)
-        print("背景信息:", background)
-
-
-
         # 统一处理 main_characters
         main_characters = data.get("main_characters")
         if isinstance(main_characters, (list, tuple)):
@@ -35,32 +29,41 @@ def chat():
         else:
             mc_text = str(main_characters) if main_characters else "无明确角色"
 
+        print("世界观:", worldview)
+        print("主要角色 sitting:", master_sitting)
+        print("背景信息:", background)
         print("主要角色信息:", mc_text)
         # 构造结构化提示词
         structured_prompt = f"""[Role]
-你需要完全代入本次指定的「主要角色」，以该角色的第一人称视角行动。需严格遵循角色的性格、身份、说话风格，所有动作、神态、对话必须符合角色设定。
+你是一位「沉浸式互动剧本作者」，用第三人称全知视角写作。
+你可以描写任何角色（包括核心人物、其余关系人物、环境），但**核心人物**必须是笔墨最多、性格最鲜活的那一位，其行为需严格遵循设定的性格、身份与说话风格。  
+语言风格参照提供的「世界观」与「角色设定」，保持古风、简洁、带画面感，所有内容必须**承接玩家上次说的话**，自然延续对话节点（而非修饰玩家上轮话语）。
 
 [Core Context]
 # 世界观
 {worldview or '无特殊设定'}
 
-# 章节背景
+# 核心人物（重点刻画）
+{master_sitting}
+
+# 其余关系人物（可偶尔出场）
+{mc_text or '无特定人物关系'}
+
+# 玩家信息背景
 {background or '无特定场景'}
 
-# 主要角色信息
-{mc_text}
-
 [Output Requirements]
-1. 内容必须包含三要素：「角色动作描写」+「神态刻画」+「角色对话」，三者逻辑连贯。
-2. 禁止重复其他角色（包括用户）的动作、语言或观点，仅输出当前「主要角色」的即时反应。
-3. 语言风格需贴合角色身份，避免与世界观冲突。
-4. 单条回复长度控制在30-150字，聚焦当前对话节点的自然延续。
+1. 一段 30～150 字回复：
+   - 核心人物需包含「动作描写+神态刻画+对话」三要素，逻辑连贯；
+   - 允许搭配「人物动作/台词」+「环境/旁白」，但核心人物占主导戏份；
+2. 禁止出现现代网络梗、OOC 提示、括号解说，语言贴合世界观与角色身份；
+3. 直接输出正文，不要带“【角色】：”这类前缀，聚焦当前对话节点的自然延续。
 
-[Current Conversation History]
+[Recent History]
 {json.dumps(history, ensure_ascii=False) if history else '无历史对话'}
 """
 
-        messages = [{"role": "system", "content": structured_prompt}] + [{"role":"user","content":"现在我需要你扮演主要角色，继续下一个对话节点。"}]
+        messages = [{"role": "system", "content": structured_prompt}] + [{"role":"user","content":"现在我需要你根据最近的历史对话，继续下一个对话节点。"}]
 
         response = client.chat.completions.create(
             model="glm-4-plus",
@@ -97,8 +100,9 @@ def chat_suggestions():
 
 [Core Context]
 世界观：{data.get("worldview") or "无特殊设定"}
-主要角色信息：{mc_text}
-章节背景：{data.get("background") or "无特定场景"}
+核心人物 sitting：{data.get("master_sitting") or "无特定人物关系"}
+其余关系人物信息：{mc_text}
+玩家背景：{data.get("background") or "无特定场景"}
 
 [Output Requirements]
 1. 数量：必须生成6条回复示例，每条为独立的可能延续方向
