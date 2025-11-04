@@ -66,12 +66,14 @@ def get_chapters_by_world_and_creator(world_id):
     try:
         creator_user_id = request.args.get('creator_user_id', type=int)
         if not creator_user_id:
-            return jsonify({'error': '缺少creator_user_id参数'}), 400
-            
-        chapters = Chapter.query.filter_by(
-            world_id=world_id,
-            creator_user_id=creator_user_id
-        ).all()
+            # 如果没有提供creator_user_id，获取该世界下的所有章节
+            chapters = Chapter.query.filter_by(world_id=world_id).all()
+        else:
+            # 如果提供了creator_user_id，按原逻辑过滤
+            chapters = Chapter.query.filter_by(
+                world_id=world_id,
+                creator_user_id=creator_user_id
+            ).all()
         
         result = [
             {
@@ -83,7 +85,7 @@ def get_chapters_by_world_and_creator(world_id):
                 'background': chapter.background,
                 'is_default': chapter.is_default,
                 'origin_chapter_id': chapter.origin_chapter_id,
-                'create_time': chapter.create_time.isoformat()
+                'create_time': chapter.create_time.isoformat() if hasattr(chapter.create_time, 'isoformat') else chapter.create_time
             } for chapter in chapters
         ]
         return jsonify(result)
