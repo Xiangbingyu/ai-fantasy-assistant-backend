@@ -218,7 +218,7 @@ def analyze_story():
 
 [Output Requirements]
 请用流畅的中文段落输出，包含以下要点，每部分用空行隔开：
-1. 剧情概览：用100字以内总结当前剧情走向。
+1. 剧情概览：用100字总结当前剧情走向。
 2. 关键事件：按时间顺序列出1-5个最重要的事件，每条30字左右，用“·”开头。
 3. 角色状态：分析主要角色与玩家的当前情感、立场变化。
 4. 长期记忆：提炼1-5点对后续剧情有持续影响的伏笔或重要信息。
@@ -233,7 +233,7 @@ def analyze_story():
         ]
 
         response = client.chat.completions.create(
-            model="glm-4.6",
+            model="glm-4-plus",
             messages=messages,
             thinking={"type": "enabled"},
             temperature=0.3
