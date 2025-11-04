@@ -19,6 +19,10 @@ def chat():
         worldview = data.get("worldview") or ""
         master_sitting = data.get("master_sitting") or ""
         background = data.get("background") or ""
+        # 获取剧情分析参数
+        story_analysis = data.get("story_analysis") or ""
+        # 获取剧情引导参数
+        story_guide = data.get("story_guide") or ""
 
         # 统一处理 main_characters
         main_characters = data.get("main_characters")
@@ -31,8 +35,10 @@ def chat():
 
         print("世界观:", worldview)
         print("主要角色 sitting:", master_sitting)
-        print("背景信息:", background)
+        print("玩家背景设定:", background)
         print("主要角色信息:", mc_text)
+        print("剧情分析:", story_analysis)
+        print("剧情引导:", story_guide)
         # 构造结构化提示词
         structured_prompt = f"""[Role]
 你是一位「沉浸式互动剧本作者」，用第三人称全知视角写作。
@@ -49,8 +55,16 @@ def chat():
 # 其余关系人物（可偶尔出场）
 {mc_text or '无特定人物关系'}
 
-# 玩家信息背景
-{background or '无特定场景'}
+# 玩家背景设定
+{background or '无特定玩家背景'}
+
+# 剧情状态分析
+{story_analysis or '无剧情分析信息'}
+
+# 剧情引导（必须遵循）
+{story_guide or '无特定剧情引导，可自由发挥'}
+
+请务必在回复中体现剧情引导的要求，确保故事发展符合用户期望的方向。
 
 [Input Handling]
 请注意：玩家消息可能包含"开场白"或"正文："前缀，这是系统添加的标记，请直接理解内容含义，不要在回复中重复或强调这个前缀。
@@ -154,6 +168,87 @@ def chat_suggestions():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@llm_bp.route("/chat/analyze", methods=["POST"])
+def analyze_story():
+    try:
+        data = request.get_json(silent=True) or {}
+        history = data.get("messages") or []
+
+        # 提取上下文字段
+        worldview = data.get("worldview") or ""
+        master_sitting = data.get("master_sitting") or ""
+        background = data.get("background") or ""
+
+        # 统一处理 main_characters
+        main_characters = data.get("main_characters")
+        if isinstance(main_characters, (list, tuple)):
+            mc_text = ", ".join(map(str, main_characters))
+        elif isinstance(main_characters, dict):
+            mc_text = json.dumps(main_characters, ensure_ascii=False)
+        else:
+            mc_text = str(main_characters) if main_characters else "无明确角色"
+
+        print("开始分析剧情:")
+        print("世界观:", worldview)
+        print("主要角色 setting:", master_sitting)
+        print("玩家背景设定:", background)
+        print("主要角色信息:", mc_text)
+
+        # 构造结构化提示词，用于剧情分析
+        structured_prompt = f"""[Role]
+你是一位专业的剧情分析师，擅长从对话历史中提取关键信息，并整理成简短易读的文本报告。
+你的任务是分析用户提供的对话历史，结合给定的世界观、角色设定与玩家背景，
+生成一简短的剧情分析，帮助作者理解当前剧情状态并为后续创作提供参考。
+
+[Core Context]
+# 世界观
+{worldview or '无特殊设定'}
+
+# 核心人物
+{master_sitting}
+
+# 其余关系人物
+{mc_text or '无特定人物关系'}
+
+# 玩家背景设定
+{background or '无特定玩家背景'}
+
+[Current Conversation History]
+{json.dumps(history, ensure_ascii=False) if history else '无历史对话'}
+
+[Output Requirements]
+请用流畅的中文段落输出，包含以下要点，每部分用空行隔开：
+1. 剧情概览：用100字以内总结当前剧情走向。
+2. 关键事件：按时间顺序列出1-5个最重要的事件，每条30字左右，用“·”开头。
+3. 角色状态：分析主要角色与玩家的当前情感、立场变化。
+4. 长期记忆：提炼1-5点对后续剧情有持续影响的伏笔或重要信息。
+5. 冲突张力：指出当前存在的主要矛盾或悬念。
+
+无需任何标题或前缀，直接输出正文即可。
+"""
+
+        messages = [
+            {"role": "system", "content": structured_prompt},
+            {"role": "user", "content": "请根据提供的对话历史和上下文信息，分析当前剧情情况，提取关键事件并整理长期记忆。"}
+        ]
+
+        response = client.chat.completions.create(
+            model="glm-4.6",
+            messages=messages,
+            thinking={"type": "enabled"},
+            temperature=0.3
+        )
+
+        print("剧情分析原始响应：", response)
+        analysis_text = response.choices[0].message.content
+        print("剧情分析内容：", analysis_text)
+
+        # 直接返回纯文本分析结果
+        return jsonify({"analysis": analysis_text})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @llm_bp.route("/novel", methods=["POST"])
 def generate_novel():
     try:
@@ -161,11 +256,6 @@ def generate_novel():
         data = request.get_json()
         if not data or "prompt" not in data:
             return jsonify({"error": "缺少小说生成提示信息"}), 400
-
-        system_prompt = (
-            "你是一位资深小说家，请根据以下提示创作一篇风格契合、详略得当、细节丰富的小说。"
-            "生成的内容需严格遵循格式要求：第一段话必须是章节标题，无需任何开场白（如‘好的，故事开始了’等引导语），直接以标题开头进行创作。"
-        )
 
         # 新增：从请求体获取上下文字段并组装为第二条 system 消息
         # 构造结构化提示词，更聚焦于对话内容
@@ -195,13 +285,13 @@ def generate_novel():
 # 世界观（仅供风格参考）
 {worldview or "无特殊设定"}
 
-# 核心人物（仅供性格参考）
+# 核心人物设定
 {master_sitting or "无特定人物关系"}
 
 # 其余角色（必要时可出现）
 {mc_text if main_characters else "无其他角色"}
 
-# 背景信息（仅供场景参考）
+# 玩家背景
 {background or "无特定场景"}
 
 [Output Requirements]
