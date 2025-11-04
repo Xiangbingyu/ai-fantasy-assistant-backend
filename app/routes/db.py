@@ -494,3 +494,57 @@ def create_user_world():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+# 删除世界及其所有相关数据
+@db_bp.route('/worlds/<int:world_id>', methods=['DELETE'])
+def delete_world(world_id):
+    try:
+        # 查找世界是否存在
+        world = World.query.get(world_id)
+        if world is None:
+            return jsonify({'error': '世界不存在'}), 404
+
+        # 1. 获取该世界下的所有章节ID
+        chapters = Chapter.query.filter_by(world_id=world_id).all()
+        chapter_ids = [chapter.id for chapter in chapters]
+        
+        # 2. 删除所有章节相关的消息和小说记录
+        deleted_messages = 0
+        deleted_novels = 0
+        for chapter_id in chapter_ids:
+            # 删除章节下的消息
+            deleted_messages += ConversationMessage.query.filter(
+                ConversationMessage.chapter_id == chapter_id
+            ).delete(synchronize_session=False)
+            
+            # 删除章节下的小说
+            deleted_novels += NovelRecord.query.filter(
+                NovelRecord.chapter_id == chapter_id
+            ).delete(synchronize_session=False)
+        
+        # 3. 删除所有章节
+        deleted_chapters = Chapter.query.filter_by(world_id=world_id).delete(synchronize_session=False)
+        
+        # 4. 删除用户与世界的关系记录
+        deleted_user_worlds = UserWorld.query.filter_by(world_id=world_id).delete(synchronize_session=False)
+        
+        # 5. 删除世界角色
+        deleted_characters = WorldCharacter.query.filter_by(world_id=world_id).delete(synchronize_session=False)
+        
+        # 6. 最后删除世界本身
+        db.session.delete(world)
+        db.session.commit()
+
+        return jsonify({
+            'message': '世界删除成功',
+            'world_id': world_id,
+            'deleted_chapters': deleted_chapters,
+            'deleted_messages': deleted_messages,
+            'deleted_novels': deleted_novels,
+            'deleted_user_worlds': deleted_user_worlds,
+            'deleted_characters': deleted_characters
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
