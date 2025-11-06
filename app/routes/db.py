@@ -538,6 +538,28 @@ def create_user_world():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+# 增加世界的popularity值
+@db_bp.route('/worlds/<int:world_id>/increase-popularity', methods=['POST'])
+def increase_world_popularity(world_id):
+    try:
+        # 查找世界是否存在
+        world = World.query.get(world_id)
+        if world is None:
+            return jsonify({'error': '世界不存在'}), 404
+        
+        # 增加popularity值
+        world.popularity = (world.popularity or 0) + 1
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'popularity增加成功',
+            'world_id': world_id,
+            'new_popularity': world.popularity
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
 # 删除世界及其所有相关数据
 @db_bp.route('/worlds/<int:world_id>', methods=['DELETE'])
 def delete_world(world_id):
