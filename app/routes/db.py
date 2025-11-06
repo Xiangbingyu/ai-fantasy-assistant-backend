@@ -144,7 +144,48 @@ def get_messages_by_chapter(chapter_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# 4. 获取指定chapter_id对应的全部NovelRecord信息
+# 新增：获取所有NovelRecord信息（小说集功能）
+@db_bp.route('/novels', methods=['GET'])
+def get_all_novels():
+    try:
+        # 获取查询参数，支持按用户ID筛选
+        user_id = request.args.get('user_id', type=int)
+        
+        query = NovelRecord.query
+        
+        if user_id:
+            query = query.filter_by(user_id=user_id)
+        
+        # 按创建时间倒序排列
+        novels = query.order_by(NovelRecord.create_time.desc()).all()
+        
+        result = []
+        for novel in novels:
+            # 获取关联的章节信息（可选，用于显示更多上下文）
+            chapter = Chapter.query.get(novel.chapter_id)
+            world = World.query.get(chapter.world_id) if chapter else None
+            
+            novel_data = {
+                'id': novel.id,
+                'chapter_id': novel.chapter_id,
+                'user_id': novel.user_id,
+                'title': novel.title,
+                'content': novel.content,
+                'create_time': novel.create_time.isoformat()
+            }
+            
+            # 添加关联信息（如果存在）
+            if chapter:
+                novel_data['chapter_name'] = chapter.name
+            if world:
+                novel_data['world_name'] = world.name
+                novel_data['world_id'] = world.id
+            
+            result.append(novel_data)
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 @db_bp.route('/chapters/<int:chapter_id>/novels', methods=['GET'])
 def get_novels_by_chapter(chapter_id):
     try:
