@@ -3,16 +3,19 @@ from flask_socketio import SocketIO, emit, join_room
 from zai import ZhipuAiClient
 from app.config import Config
 from app.models import db, ConversationMessage
+from app.logging_config import setup_logging
 import json
 import logging
+
+# 确保日志配置正确
+setup_logging()
 
 websocket_bp = Blueprint('websocket', __name__)
 socketio = SocketIO()
 
 client = ZhipuAiClient(api_key=Config.ZHIPU_API_KEY)
 
-# 配置日志
-logging.basicConfig(level=logging.INFO)
+# 使用配置好的日志器
 logger = logging.getLogger(__name__)
 
 @socketio.on('connect')
