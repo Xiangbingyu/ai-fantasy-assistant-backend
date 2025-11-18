@@ -18,7 +18,7 @@ def create_app() -> Flask:
     db.init_app(app)
     
     # 初始化SocketIO
-    socketio.init_app(app, cors_allowed_origins="*")
+    socketio.init_app(app)
     
     # 注册路由蓝图
     app.register_blueprint(llm_bp)
