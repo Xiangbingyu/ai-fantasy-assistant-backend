@@ -109,9 +109,11 @@ def handle_chat_stream(data):
 
         # 用于累积流式响应内容
         accumulated_content = ""
+        chunk_count = 0
 
         # 创建流式响应
         try:
+            logger.info("开始创建流式响应...")
             stream = client.chat.completions.create(
                 model="glm-4-plus",
                 messages=messages,
@@ -119,20 +121,31 @@ def handle_chat_stream(data):
                 max_tokens=200,
                 stream=True
             )
+            logger.info("流式响应创建成功，开始处理数据块...")
             
             # 发送流式响应并累积内容
             for chunk in stream:
-                if chunk.choices[0].delta.content:
+                chunk_count += 1
+                logger.debug(f"处理第 {chunk_count} 个数据块")
+                
+                if chunk.choices and len(chunk.choices) > 0 and chunk.choices[0].delta.content:
                     content = chunk.choices[0].delta.content
                     accumulated_content += content
+                    logger.debug(f"收到内容: '{content}', 累积长度: {len(accumulated_content)}")
+                    
                     emit('chat_stream_data', {
                         'content': content,
                         'finished': False
                     })
+                else:
+                    logger.debug(f"数据块 {chunk_count} 无内容或格式异常")
+            
+            logger.info(f"流式处理完成 - 总共处理 {chunk_count} 个数据块, 累积内容长度: {len(accumulated_content)}")
             logger.info(f"AI回复已完成 - 内容: {accumulated_content}")
             
             # 保存AI消息到数据库
             if accumulated_content and chapter_id and user_id:
+                logger.info(f"开始保存AI消息到数据库 - chapter_id: {chapter_id}, user_id: {user_id}")
                 try:
                     ai_message = ConversationMessage(
                         chapter_id=int(chapter_id),
@@ -154,12 +167,18 @@ def handle_chat_stream(data):
                     db.session.rollback()
                     emit('chat_stream_end', {'finished': True})
             else:
+                logger.warning(f"无法保存AI消息 - accumulated_content: {bool(accumulated_content)}, chapter_id: {chapter_id}, user_id: {user_id}")
                 # 发送完成信号
                 emit('chat_stream_end', {'finished': True})
                 
         except Exception as stream_error:
             logger.error(f"流式响应失败: {str(stream_error)}")
+            logger.error(f"异常类型: {type(stream_error).__name__}")
+            import traceback
+            logger.error(f"异常堆栈: {traceback.format_exc()}")
+            
             # 如果流式响应失败，降级到普通响应
+            logger.info("降级到普通响应模式...")
             response = client.chat.completions.create(
                 model="glm-4-plus",
                 messages=messages,
@@ -169,6 +188,7 @@ def handle_chat_stream(data):
             
             content = response.choices[0].message.content
             accumulated_content = content
+            logger.info(f"普通响应完成 - 内容长度: {len(content)}")
             
             # 保存AI消息到数据库
             if content and chapter_id and user_id:

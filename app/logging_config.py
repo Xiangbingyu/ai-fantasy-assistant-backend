@@ -13,7 +13,7 @@ def setup_logging():
     
     # 设置根日志记录器
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
+    root_logger.setLevel(logging.DEBUG)  # 改为DEBUG级别以获取更多信息
     
     # 清除现有的处理器
     for handler in root_logger.handlers[:]:
@@ -21,7 +21,7 @@ def setup_logging():
     
     # 添加控制台处理器
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.DEBUG)  # 控制台也输出DEBUG级别
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
     
@@ -32,7 +32,7 @@ def setup_logging():
     
     # 确保我们的应用日志器使用正确的配置
     app_logger = logging.getLogger('app.routes.websocket')
-    app_logger.setLevel(logging.INFO)
+    app_logger.setLevel(logging.DEBUG)  # 应用模块使用DEBUG级别
     
     return root_logger
 
