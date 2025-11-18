@@ -126,6 +126,7 @@ def handle_chat_stream(data):
                         'content': content,
                         'finished': False
                     })
+            logger.info(f"AI回复已完成 - 内容: {accumulated_content}")
             
             # 保存AI消息到数据库
             if accumulated_content and chapter_id and user_id:
