@@ -7,7 +7,7 @@ import json
 import logging
 
 websocket_bp = Blueprint('websocket', __name__)
-socketio = SocketIO(async_mode='asgi', cors_allowed_origins="*")
+socketio = SocketIO(cors_allowed_origins="*")
 
 client = ZhipuAiClient(api_key=Config.ZHIPU_API_KEY)
 

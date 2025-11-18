@@ -18,7 +18,7 @@ def create_app() -> Flask:
     db.init_app(app)
     
     # 初始化SocketIO
-    socketio.init_app(app)
+    socketio.init_app(app, async_mode='threading')
     
     # 注册路由蓝图
     app.register_blueprint(llm_bp)
