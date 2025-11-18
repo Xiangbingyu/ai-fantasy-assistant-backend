@@ -310,11 +310,11 @@ def generate_novel():
             {"role": "user", "content": f"请基于以下对话内容创作小说：\n{data['prompt']}"}
         ]
 
-        # 调用glm-4.6模型生成小说
         response = client.chat.completions.create(
-            model="glm-4.6",
+            # model="glm-4.6",
+            model="glm-4-plus",
             messages=messages,
-            thinking={"type": "enabled"},
+            # thinking={"type": "enabled"},
             temperature=0.7
         )
 
