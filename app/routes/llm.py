@@ -2,10 +2,135 @@ from flask import Blueprint, request, jsonify
 from zai import ZhipuAiClient
 from app.config import Config
 import json
+import uuid
+import threading
+import time
+from datetime import datetime
 
 llm_bp = Blueprint('llm', __name__, url_prefix='/api')
 
 client = ZhipuAiClient(api_key=Config.ZHIPU_API_KEY)
+
+# 全局任务存储，用于跟踪异步任务状态
+novel_tasks = {}
+
+def generate_novel_async(task_id, data, socketio_instance):
+    """异步生成小说的后台任务"""
+    try:
+        # 更新任务状态为处理中
+        novel_tasks[task_id] = {
+            "status": "processing",
+            "progress": "开始生成小说...",
+            "created_at": datetime.now().isoformat(),
+            "result": None,
+            "error": None
+        }
+        
+        # 通过 WebSocket 通知任务开始
+        socketio_instance.emit('novel_task_update', {
+            'task_id': task_id,
+            'status': 'processing',
+            'progress': '开始生成小说...'
+        })
+        
+        # 构造结构化提示词
+        worldview = data.get("worldview")
+        master_sitting = data.get("master_sitting")
+        main_characters = data.get("main_characters")
+        background = data.get("background")
+
+        # 统一组装主要角色信息
+        if isinstance(main_characters, (list, tuple)):
+            mc_text = ", ".join([str(x) for x in main_characters])
+        elif isinstance(main_characters, dict):
+            mc_text = json.dumps(main_characters, ensure_ascii=False)
+        else:
+            mc_text = str(main_characters) if main_characters is not None else ""
+
+        structured_prompt = f"""[Role]
+你是一位资深小说家，擅长将对话内容扩展为精彩的小说故事，且输出内容需严格遵循 Markdown 格式规范。
+你的创作重点应该是**忠实还原并扩展用户提供的对话内容**，将其转化为连贯、生动的小说叙述。
+
+[创作指南]
+1. **核心素材**：用户提供的对话内容是创作的核心和基础，必须完整保留其情节发展人物互动。
+2. **辅助素材**：世界观、人物设定等信息仅作为辅助参考，用于确保风格一致，不应喧宾夺主。
+3. **创作方式**：将对话自然地融入故事叙述中，适当补充场景描写和人物心理，使对话更具画面感。
+
+[Context References]
+# 世界观（仅供风格参考）
+{worldview or "无特殊设定"}
+
+# 核心人物设定
+{master_sitting or "无特定人物关系"}
+
+# 其余角色（必要时可出现）
+{mc_text if main_characters else "无其他角色"}
+
+# 玩家背景
+{background or "无特定场景"}
+
+[Output Requirements]
+1. 标题格式：第一段必须是章节标题，使用 Markdown 一级标题（# 标题内容），简洁有力，直接点明故事核心。
+2. 主体内容必须**紧密围绕用户提供的对话内容**展开创作。
+3. 风格要求：语言风格与世界观一致，自然流畅，避免冗余；仅输出小说内容，无任何额外引导语（如「故事开始了」）或说明文字。
+4. 详略得当：对话相关内容应详细展开，场景、心理、动作等描写需与对话融合，设定相关但与对话无关的内容可简要带过。
+5. 格式规范：全程遵循 Markdown 语法，无杂乱排版，标题、段落、对话层级清晰，可直接复制使用。
+"""
+
+        messages = [
+            {"role": "system", "content": structured_prompt},
+            {"role": "user", "content": f"请基于以下对话内容创作小说：\n{data['prompt']}"}
+        ]
+        
+        # 更新进度
+        novel_tasks[task_id]["progress"] = "正在调用 AI 模型生成内容..."
+        socketio_instance.emit('novel_task_update', {
+            'task_id': task_id,
+            'status': 'processing',
+            'progress': '正在调用 AI 模型生成内容...'
+        })
+
+        response = client.chat.completions.create(
+            model="glm-4-plus",
+            messages=messages,
+            temperature=0.7
+        )
+
+        result = response.choices[0].message.content
+        
+        print(f"任务 {task_id} 大模型原始响应：", response)
+        print(f"任务 {task_id} AI回复内容：", result)
+        
+        # 更新任务状态为完成
+        novel_tasks[task_id].update({
+            "status": "completed",
+            "progress": "小说生成完成",
+            "result": result,
+            "completed_at": datetime.now().isoformat()
+        })
+        
+        # 通过 WebSocket 发送完成通知
+        socketio_instance.emit('novel_task_complete', {
+            'task_id': task_id,
+            'status': 'completed',
+            'result': result
+        })
+        
+    except Exception as e:
+        print(f"任务 {task_id} 生成失败：", str(e))
+        # 更新任务状态为失败
+        novel_tasks[task_id].update({
+            "status": "failed",
+            "error": str(e),
+            "failed_at": datetime.now().isoformat()
+        })
+        
+        # 通过 WebSocket 发送失败通知
+        socketio_instance.emit('novel_task_error', {
+            'task_id': task_id,
+            'status': 'failed',
+            'error': str(e)
+        })
 
 @llm_bp.route("/chat", methods=["POST"])
 def chat():
@@ -260,68 +385,68 @@ def generate_novel():
         if not data or "prompt" not in data:
             return jsonify({"error": "缺少小说生成提示信息"}), 400
 
-        # 新增：从请求体获取上下文字段并组装为第二条 system 消息
-        # 构造结构化提示词，更聚焦于对话内容
-        worldview = data.get("worldview")
-        master_sitting = data.get("master_sitting")
-        main_characters = data.get("main_characters")
-        background = data.get("background")
-
-        # 统一组装主要角色信息
-        if isinstance(main_characters, (list, tuple)):
-            mc_text = ", ".join([str(x) for x in main_characters])
-        elif isinstance(main_characters, dict):
-            mc_text = json.dumps(main_characters, ensure_ascii=False)
-        else:
-            mc_text = str(main_characters) if main_characters is not None else ""
-
-        structured_prompt = f"""[Role]
-你是一位资深小说家，擅长将对话内容扩展为精彩的小说故事，且输出内容需严格遵循 Markdown 格式规范。
-你的创作重点应该是**忠实还原并扩展用户提供的对话内容**，将其转化为连贯、生动的小说叙述。
-
-[创作指南]
-1. **核心素材**：用户提供的对话内容是创作的核心和基础，必须完整保留其情节发展人物互动。
-2. **辅助素材**：世界观、人物设定等信息仅作为辅助参考，用于确保风格一致，不应喧宾夺主。
-3. **创作方式**：将对话自然地融入故事叙述中，适当补充场景描写和人物心理，使对话更具画面感。
-
-[Context References]
-# 世界观（仅供风格参考）
-{worldview or "无特殊设定"}
-
-# 核心人物设定
-{master_sitting or "无特定人物关系"}
-
-# 其余角色（必要时可出现）
-{mc_text if main_characters else "无其他角色"}
-
-# 玩家背景
-{background or "无特定场景"}
-
-[Output Requirements]
-1. 标题格式：第一段必须是章节标题，使用 Markdown 一级标题（# 标题内容），简洁有力，直接点明故事核心。
-2. 主体内容必须**紧密围绕用户提供的对话内容**展开创作。
-3. 风格要求：语言风格与世界观一致，自然流畅，避免冗余；仅输出小说内容，无任何额外引导语（如「故事开始了」）或说明文字。
-4. 详略得当：对话相关内容应详细展开，场景、心理、动作等描写需与对话融合，设定相关但与对话无关的内容可简要带过。
-5. 格式规范：全程遵循 Markdown 语法，无杂乱排版，标题、段落、对话层级清晰，可直接复制使用。
-"""
-
-        messages = [
-            {"role": "system", "content": structured_prompt},
-            {"role": "user", "content": f"请基于以下对话内容创作小说：\n{data['prompt']}"}
-        ]
-
-        response = client.chat.completions.create(
-            # model="glm-4.6",
-            model="glm-4-plus",
-            messages=messages,
-            # thinking={"type": "enabled"},
-            temperature=0.7
+        # 生成唯一任务ID
+        task_id = str(uuid.uuid4())
+        
+        # 导入 socketio 实例
+        from app.routes.websocket import socketio
+        
+        # 启动后台任务
+        thread = threading.Thread(
+            target=generate_novel_async,
+            args=(task_id, data, socketio)
         )
+        thread.daemon = True
+        thread.start()
+        
+        # 立即返回任务ID
+        return jsonify({
+            "task_id": task_id,
+            "status": "accepted",
+            "message": "小说生成任务已接受，正在处理中..."
+        })
 
-        print("大模型原始响应：", response)
-        print("AI回复内容：", response.choices[0].message.content)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-        return jsonify({"response": response.choices[0].message.content})
+@llm_bp.route("/novel/status/<task_id>", methods=["GET"])
+def get_novel_status(task_id):
+    """查询小说生成任务状态"""
+    try:
+        if task_id not in novel_tasks:
+            return jsonify({"error": "任务不存在"}), 404
+            
+        task_info = novel_tasks[task_id]
+        return jsonify(task_info)
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
+@llm_bp.route("/novel/cleanup", methods=["POST"])
+def cleanup_old_tasks():
+    """清理超过24小时的已完成任务"""
+    try:
+        current_time = datetime.now()
+        tasks_to_remove = []
+        
+        for task_id, task_info in novel_tasks.items():
+            if task_info["status"] in ["completed", "failed"]:
+                # 获取完成时间
+                completed_at = task_info.get("completed_at") or task_info.get("failed_at")
+                if completed_at:
+                    completed_time = datetime.fromisoformat(completed_at.replace('Z', '+00:00'))
+                    # 如果任务完成超过24小时，则删除
+                    if (current_time - completed_time).total_seconds() > 86400:  # 24小时
+                        tasks_to_remove.append(task_id)
+        
+        # 删除过期任务
+        for task_id in tasks_to_remove:
+            del novel_tasks[task_id]
+        
+        return jsonify({
+            "message": f"已清理 {len(tasks_to_remove)} 个过期任务",
+            "cleaned_tasks": tasks_to_remove
+        })
+        
     except Exception as e:
         return jsonify({"error": str(e)}), 500
