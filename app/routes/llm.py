@@ -91,8 +91,9 @@ def generate_novel_async(task_id, data, socketio_instance):
         })
 
         response = client.chat.completions.create(
-            model="glm-4-plus",
+            model="glm-4.6",
             messages=messages,
+            thinking={"type": "enabled"},
             temperature=0.7
         )
 
