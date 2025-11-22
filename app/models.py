@@ -82,6 +82,7 @@ class NovelRecord(db.Model):
     title = db.Column(db.String(200), nullable=True)
     content = db.Column(db.Text, nullable=False)
     create_time = db.Column(db.DateTime, default=datetime.utcnow)
+    popularity = db.Column(db.Integer, default=0)
     
     # 关系
     chapter = db.relationship('Chapter', backref=db.backref('novels', lazy=True))

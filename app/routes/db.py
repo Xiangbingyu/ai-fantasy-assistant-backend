@@ -148,16 +148,21 @@ def get_messages_by_chapter(chapter_id):
 @db_bp.route('/novels', methods=['GET'])
 def get_all_novels():
     try:
-        # 获取查询参数，支持按用户ID筛选
+        # 获取查询参数，支持按用户ID筛选和排序方式
         user_id = request.args.get('user_id', type=int)
+        sort_by = request.args.get('sort_by', 'create_time')  # 默认为按创建时间排序
         
         query = NovelRecord.query
         
         if user_id:
             query = query.filter_by(user_id=user_id)
         
-        # 按创建时间倒序排列
-        novels = query.order_by(NovelRecord.create_time.desc()).all()
+        # 根据排序参数进行排序
+        if sort_by == 'popularity':
+            novels = query.order_by(NovelRecord.popularity.desc()).all()
+        else:
+            # 默认为按创建时间倒序排列
+            novels = query.order_by(NovelRecord.create_time.desc()).all()
         
         result = []
         for novel in novels:
@@ -171,7 +176,8 @@ def get_all_novels():
                 'user_id': novel.user_id,
                 'title': novel.title,
                 'content': novel.content,
-                'create_time': novel.create_time.isoformat()
+                'create_time': novel.create_time.isoformat(),
+                'popularity': novel.popularity or 0
             }
             
             # 添加关联信息（如果存在）
@@ -189,9 +195,18 @@ def get_all_novels():
 @db_bp.route('/chapters/<int:chapter_id>/novels', methods=['GET'])
 def get_novels_by_chapter(chapter_id):
     try:
-        novels = NovelRecord.query.filter_by(chapter_id=chapter_id).order_by(
-            NovelRecord.create_time.desc()
-        ).all()
+        # 获取排序参数
+        sort_by = request.args.get('sort_by', 'create_time')
+        
+        # 根据排序参数进行排序
+        if sort_by == 'popularity':
+            novels = NovelRecord.query.filter_by(chapter_id=chapter_id).order_by(
+                NovelRecord.popularity.desc()
+            ).all()
+        else:
+            novels = NovelRecord.query.filter_by(chapter_id=chapter_id).order_by(
+                NovelRecord.create_time.desc()
+            ).all()
         
         result = [
             {
@@ -200,7 +215,8 @@ def get_novels_by_chapter(chapter_id):
                 'user_id': novel.user_id,
                 'title': novel.title,
                 'content': novel.content,
-                'create_time': novel.create_time.isoformat()
+                'create_time': novel.create_time.isoformat(),
+                'popularity': novel.popularity or 0
             } for novel in novels
         ]
         return jsonify(result)
@@ -248,7 +264,8 @@ def create_novel(chapter_id):
             'user_id': novel.user_id,
             'title': novel.title,
             'content': novel.content,
-            'create_time': novel.create_time.isoformat()
+            'create_time': novel.create_time.isoformat(),
+            'popularity': novel.popularity or 0
         }), 201
 
     except Exception as e:
@@ -555,6 +572,28 @@ def increase_world_popularity(world_id):
             'message': 'popularity增加成功',
             'world_id': world_id,
             'new_popularity': world.popularity
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+# 增加小说的popularity值
+@db_bp.route('/novels/<int:novel_id>/increase-popularity', methods=['POST'])
+def increase_novel_popularity(novel_id):
+    try:
+        # 查找小说是否存在
+        novel = NovelRecord.query.get(novel_id)
+        if novel is None:
+            return jsonify({'error': '小说不存在'}), 404
+        
+        # 增加popularity值
+        novel.popularity = (novel.popularity or 0) + 1
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'popularity增加成功',
+            'novel_id': novel_id,
+            'new_popularity': novel.popularity
         }), 200
     except Exception as e:
         db.session.rollback()
