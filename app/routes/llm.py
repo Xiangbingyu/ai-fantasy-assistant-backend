@@ -298,11 +298,40 @@ def chat_suggestions():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+def apply_sliding_window(messages, window_size=20):
+    """
+    应用滑动窗口技术处理对话历史，只保留最近的N轮对话
+    
+    Args:
+        messages: 完整的对话历史列表
+        window_size: 滑动窗口大小，默认保留最近20轮对话
+    
+    Returns:
+        处理后的对话历史列表
+    """
+    if not messages:
+        return []
+    
+    # 确保window_size为正数
+    window_size = max(1, window_size)
+    
+    # 如果消息少于窗口大小，则全部保留
+    if len(messages) <= window_size:
+        return messages
+    
+    # 只保留最近的N轮对话
+    return messages[-window_size:]
+
 @llm_bp.route("/chat/analyze", methods=["POST"])
 def analyze_story():
     try:
         data = request.get_json(silent=True) or {}
         history = data.get("messages") or []
+        
+        # 应用滑动窗口，保留最近的对话
+        # 从请求中获取窗口大小参数，默认为20轮对话
+        window_size = 20
+        filtered_history = apply_sliding_window(history, window_size)
 
         # 提取上下文字段
         worldview = data.get("worldview") or ""
@@ -323,6 +352,7 @@ def analyze_story():
         print("主要角色 setting:", master_sitting)
         print("玩家背景设定:", background)
         print("主要角色信息:", mc_text)
+        print(f"原始对话历史长度: {len(history)}, 应用滑动窗口后长度: {len(filtered_history)}")
 
         # 构造结构化提示词，用于剧情分析
         structured_prompt = f"""[Role]
@@ -342,12 +372,12 @@ def analyze_story():
 {background or '无特定玩家背景'}
 
 [Current Conversation History]
-{json.dumps(history, ensure_ascii=False) if history else '无历史对话'}
+{json.dumps(filtered_history, ensure_ascii=False) if filtered_history else '无历史对话'}
 
 [Output Requirements]
 用流畅中文段落输出，每部分空行隔开，总字数控制在 300 字内：
 1. 剧情概览：用80字总结当前剧情走向。
-2. 关键事件：按时间顺序列出1-3个最重要的事件，每条20字以内，用“·”开头。
+2. 关键事件：按时间顺序列出1-3个最重要的事件，每条20字以内，用"·"开头。
 3. 角色与玩家状态：40 字内说明核心角色与玩家的情感 / 立场。
 4. 关键伏笔：提 1-2 个影响后续剧情的重要信息。
 5. 当前悬念：30 字内点明主要矛盾或待解问题。
