@@ -335,35 +335,35 @@ def handle_world_creator(data):
                             },
                             "character_name": {
                                 "type": "string",
-                                "description": "主要角色的名字"
+                                "description": "AI主要扮演角色的名字，非用户角色"
                             },
                             "appearance": {
                                 "type": "string",
-                                "description": "角色的外貌特征描述"
+                                "description": "AI主要扮演角色的外貌特征描述"
                             },
                             "clothing_style": {
                                 "type": "string",
-                                "description": "角色的服饰风格描述"
+                                "description": "AI主要扮演角色的服饰风格描述"
                             },
                             "character_background": {
                                 "type": "string",
-                                "description": "角色的背景故事描述"
+                                "description": "AI主要扮演角色的背景故事描述"
                             },
                             "personality_traits": {
                                 "type": "string",
-                                "description": "角色的性格特征描述"
+                                "description": "AI主要扮演角色的性格特征描述"
                             },
                             "language_style": {
                                 "type": "string",
-                                "description": "角色的语言风格描述"
+                                "description": "AI主要扮演角色的语言风格描述"
                             },
                             "behavior_logic": {
                                 "type": "string",
-                                "description": "角色的行为逻辑描述"
+                                "description": "AI主要扮演角色的行为逻辑描述"
                             },
                             "psychological_traits": {
                                 "type": "string",
-                                "description": "角色的心理特质描述"
+                                "description": "AI主要扮演角色的心理特质描述"
                             },
                             "chapter_name": {
                                 "type": "string",
