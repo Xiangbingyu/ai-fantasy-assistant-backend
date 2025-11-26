@@ -376,12 +376,28 @@ def handle_world_creator(data):
                             "user_role": {
                                 "type": "string",
                                 "description": "用户在故事中的角色"
+                            },
+                            "other_character_names": {
+                                "type": "array",
+                                "description": "其余人物的名字列表",
+                                "items": {
+                                    "type": "string",
+                                    "description": "人物名字"
+                                }
+                            },
+                            "other_character_backgrounds": {
+                                "type": "array",
+                                "description": "其余人物的背景故事列表，与名字列表一一对应",
+                                "items": {
+                                    "type": "string",
+                                    "description": "人物背景故事"
+                                }
                             }
                         },
                         "required": ["world_name", "world_description", "character_name", "appearance", 
                                     "clothing_style", "character_background", "personality_traits", 
                                     "language_style", "behavior_logic", "psychological_traits", 
-                                    "chapter_name", "opening_line", "user_role"]
+                                    "chapter_name", "opening_line", "user_role", "other_character_names", "other_character_backgrounds"]
                     }
                 }
             }
@@ -395,8 +411,9 @@ def handle_world_creator(data):
 1. 请使用提供的create_world_setting工具来生成结构化的世界观设定。
 2. 根据用户的需求，创建详细且有创意的世界观设定。
 3. 确保所有参数都有详细且合理的内容。
-4. 如果有历史对话，请基于之前生成的内容进行细节修改或扩展，保持连贯性。
-5. 严格按照工具定义的参数格式输出，不要有任何额外的解释或说明。
+4. 必须在other_character_names和other_character_backgrounds字段中生成至少一个其余人物的信息，两个列表需要一一对应。
+5. 如果有历史对话，请基于之前生成的内容进行细节修改或扩展，保持连贯性。
+6. 严格按照工具定义的参数格式输出，不要有任何额外的解释或说明。
 """
 
         # 构建消息列表
