@@ -241,33 +241,65 @@ def chat_suggestions():
         else:
             mc_text = str(main_characters) if main_characters else ""
 
+        # 定义function call的工具
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "generate_reply_suggestions",
+                    "description": "生成6条玩家视角的回复示例，每条对应不同的情节延续方向",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "suggestion_1": {
+                                "type": "string",
+                                "description": "第一条回复示例，20-80字，中文，贴合世界观与角色身份"
+                            },
+                            "suggestion_2": {
+                                "type": "string",
+                                "description": "第二条回复示例，20-80字，中文，贴合世界观与角色身份"
+                            },
+                            "suggestion_3": {
+                                "type": "string",
+                                "description": "第三条回复示例，20-80字，中文，贴合世界观与角色身份"
+                            },
+                            "suggestion_4": {
+                                "type": "string",
+                                "description": "第四条回复示例，20-80字，中文，贴合世界观与角色身份"
+                            },
+                            "suggestion_5": {
+                                "type": "string",
+                                "description": "第五条回复示例，20-80字，中文，贴合世界观与角色身份"
+                            },
+                            "suggestion_6": {
+                                "type": "string",
+                                "description": "第六条回复示例，20-80字，中文，贴合世界观与角色身份"
+                            }
+                        },
+                        "required": ["suggestion_1", "suggestion_2", "suggestion_3", "suggestion_4", "suggestion_5", "suggestion_6"]
+                    }
+                }
+            }
+        ]
+
         # 构造 system 提示
         system_prompt = f"""[Role]
 你是对话回复辅助生成器，需基于上下文设定与历史对话，生成 6 条玩家视角的回复示例。所有内容必须贴合世界观、核心人物特征，且紧密承接上轮对话，强化剧情连贯性与代入感。
+
+[Output Requirements]
+1. 请使用提供的generate_reply_suggestions工具来生成6条回复示例。
+2. 每条回复必须对应不同的情节延续方向（如 "主动追问""动作回应""情绪流露" 等，避免方向重复）。
+3. 以玩家扮演的身份或者"你"为主语，镜头聚焦玩家动作与情绪。
+4. 必须承接上轮对话，自然推进情节；避免重复历史台词。
+5. 每句可由动作描写+神态刻画+对话组成，可含简短内心闪念。
+6. 简洁自然，20-80字，中文，贴合世界观与角色身份。
+7. 严格按照工具定义的参数格式输出，不要有任何额外的解释或说明。
 
 [Core Context]
 世界观：{data.get("worldview") or "无特殊设定"}
 核心人物设定：{data.get("master_sitting") or "无特定人物关系"}
 其余关系人物信息：{mc_text}
 玩家背景：{data.get("background") or "无特定场景"}
-
-[Output Requirements]
-1. 数量：固定生成 6 条独立回复，每条对应不同的情节延续方向（如 “主动追问”“动作回应”“情绪流露” 等，避免方向重复）
-2. 视角：以玩家扮演的身份或者“你”为主语，镜头聚焦玩家动作与情绪。
-3. 内容：必须承接上轮对话，自然推进情节；避免重复历史台词。每句可由动作描写+神态刻画+对话组成，可含简短内心闪念。
-4. 风格：简洁自然，20-80字，中文，贴合世界观与角色身份。
-4. 格式：严格输出JSON数组，结构为{{\"content\": \"示例回复\"}}，无任何额外内容。
-5. 禁忌：禁止添加解释、注释、代码块标记（如```json），禁止非JSON内容，禁止重复示例。
-
-[Format Example]
-[
-  {{\"content\": "你下意识屏住呼吸，掌心贴上她冰凉的指尖。“那就别忘，把这味道刻进记忆里。”"}},
-  {{\"content\": "你微微低头，让她的额头抵在你肩窝，声音轻得像怕惊动星屑。“我在，不会走。”"}},
-  {{\"content\": "你收紧手臂，喉结滚动了一瞬。“要是不够，再靠近一点。”"}},
-  {{\"content\": "林坤豪任她攥皱袖口，心跳声在寂静里放大。“别怕，这是我们一起活着的证据。”"}},
-  {{\"content\": "林坤豪用拇指擦过她睫毛上的星屑，低声笑。“灯塔会灭，我不会。”"}},
-  {{\"content\": "林坤豪感受到她的颤抖，心里一颤，轻轻将她抱进怀里。"}}
-]
 
 [Current Conversation History]
 {json.dumps(history, ensure_ascii=False) if history else "无历史对话"}
@@ -278,22 +310,45 @@ def chat_suggestions():
             {"role": "user", "content": "现在我需要你生成6条回复示例"}
         ]
 
+        # 创建function call响应
         response = client.chat.completions.create(
             model="glm-4-plus",
             messages=messages,
+            tools=tools,
+            tool_choice="auto",
             temperature=0.7,
-            max_tokens=600
+            max_tokens=1000
         )
 
-        text = response.choices[0].message.content
-
-        try:
-            parsed = json.loads(text)
-            if isinstance(parsed, list):
-                return jsonify({"suggestions": parsed})
-            return jsonify({"raw": text})
-        except Exception:
-            return jsonify({"raw": text})
+        # 获取function call结果
+        function_call_result = response.choices[0].message.tool_calls[0] if response.choices[0].message.tool_calls else None
+        print(function_call_result)
+        if function_call_result:
+            # 直接返回原始的function call调用信息
+            return jsonify({
+                'id': function_call_result.id,
+                'type': function_call_result.type,
+                'function': {
+                    'name': function_call_result.function.name,
+                    'arguments': function_call_result.function.arguments
+                }
+            })
+        else:
+            # 如果没有返回function call，降级处理
+            fallback_messages = [
+                {"role": "system", "content": "你是对话回复辅助生成器，请直接生成6条回复示例。"},
+                {"role": "user", "content": "现在我需要你生成6条回复示例"}
+            ]
+            
+            fallback_response = client.chat.completions.create(
+                model="glm-4-plus",
+                messages=fallback_messages,
+                temperature=0.7,
+                max_tokens=600
+            )
+            
+            content = fallback_response.choices[0].message.content
+            return jsonify({"fallback_content": content})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
